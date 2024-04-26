@@ -24,4 +24,4 @@ jobs:
     - name: Push
       run: dotnet nuget push Pipeliner.Net.${VERSION}.nupkg --source https://api.nuget.org/v3/index.json --api-key ${NUGET_APIKEY}
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NUGET_APIKEY: ${{ secrets.NUGET_APIKEY }}
