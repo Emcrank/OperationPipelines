@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Crank.OperationPipelines\Crank.OperationPipelines.csproj" />
+    <ProjectReference Include="..\Pipeliner.Net\Pipeliner.Net.csproj" />
   </ItemGroup>
 
 </Project>

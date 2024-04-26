@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Crank.OperationPipelines;
+namespace Pipeliner.Net;
 
 public abstract class Operation<TInput, TResult> : IUntypedOperation
 {

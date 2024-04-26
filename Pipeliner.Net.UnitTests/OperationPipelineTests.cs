@@ -3,7 +3,7 @@ using Serilog.Events;
 using Serilog.Extensions.Logging;
 using Serilog.Sinks.TestCorrelator;
 
-namespace Crank.OperationPipelines.UnitTests;
+namespace Pipeliner.Net.UnitTests;
 
 public class OperationPipelineTests : IDisposable
 {

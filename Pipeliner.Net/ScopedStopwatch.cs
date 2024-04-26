@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 
-namespace Crank.OperationPipelines;
+namespace Pipeliner.Net;
 
 internal class ScopedStopwatch : IDisposable
 {

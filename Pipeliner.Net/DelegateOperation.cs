@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Crank.OperationPipelines;
+namespace Pipeliner.Net;
 
 public class DelegateOperation<TInput, TOutput> : Operation<TInput, TOutput>
 {

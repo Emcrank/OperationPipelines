@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
-namespace Crank.OperationPipelines;
+namespace Pipeliner.Net;
 
 public class OperationPipeline<TParam, TResult>
 {

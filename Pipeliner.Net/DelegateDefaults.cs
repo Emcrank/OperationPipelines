@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Crank.OperationPipelines;
+namespace Pipeliner.Net;
 
 internal static class DelegateDefaults
 {
