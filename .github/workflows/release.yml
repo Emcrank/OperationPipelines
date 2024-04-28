@@ -22,7 +22,11 @@ jobs:
       run: dotnet test --configuration Release /p:Version=${VERSION} --no-build
     - name: Pack
       run: dotnet pack --configuration Release /p:Version=${VERSION} --no-build --output .
-    - name: Push
+    - name: Push GitHub
+      run: dotnet nuget push Pipeliner.Net.${VERSION}.nupkg --source https://nuget.pkg.github.com/emcrank/index.json --api-key "${GIT_APIKEY}"
+      env:
+        GIT_APIKEY: ${{ secrets.GIT_APIKEY }}
+    - name: Push NuGet
       run: dotnet nuget push Pipeliner.Net.${VERSION}.nupkg --source https://api.nuget.org/v3/index.json --api-key "${NUGET_APIKEY}"
       env:
         NUGET_APIKEY: ${{ secrets.NUGET_APIKEY }}
