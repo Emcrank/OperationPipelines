@@ -1,33 +1,33 @@
-using Serilog;
 using Serilog.Events;
-using Serilog.Extensions.Logging;
 using Serilog.Sinks.TestCorrelator;
 
 namespace Pipeliner.Net.UnitTests;
 
-public class OperationPipelineTests : IDisposable
+public partial class OperationPipelineTests
 {
-    public OperationPipelineTests()
+    [Fact]
+    public async Task RunAsync_EmbeddedPipeline_Success()
     {
-        Log.Logger = new LoggerConfiguration()
-            .WriteTo.TestCorrelator()
-            .Enrich.FromLogContext()
-            .MinimumLevel.Debug()
-            .CreateLogger();
-        testContext = TestCorrelator.CreateContext();
-    }
+        var logger = loggerFactory.CreateLogger(nameof(OperationPipelineTests));
 
-    public void Dispose()
-    {
-        testContext.Dispose();
-    }
+        var innerPipeline = new OperationPipeline<int, int>(logger)
+            .AddOperation<int, int>(x => x + 5);
 
-    private readonly ITestCorrelatorContext testContext;
+        var pipeline = new OperationPipeline<string, int>(logger)
+            .AddOperation<string, int>(Convert.ToInt32)
+            .AddPipeline(innerPipeline);
+
+        int result = await pipeline.RunAsync("50");
+        var logEvents = TestCorrelator.GetLogEventsFromCurrentContext();
+
+        Assert.Equal(55, result);
+        Assert.Equal(10, logEvents.Count(x => x.Level == LogEventLevel.Information));
+    }
 
     [Fact]
     public async Task RunAsync_ExceptionOccursAndHandlerHandlesIt_Success()
     {
-        var logger = new SerilogLoggerFactory().CreateLogger(nameof(OperationPipelineTests));
+        var logger = loggerFactory.CreateLogger(nameof(OperationPipelineTests));
 
         var pipeline = new OperationPipeline<int, int>(logger)
             // ReSharper disable once IntDivisionByZero - test
@@ -41,9 +41,9 @@ public class OperationPipelineTests : IDisposable
     [Fact]
     public async Task RunAsync_ExceptionOccursNoHandler_Success()
     {
-        var logger = new SerilogLoggerFactory().CreateLogger(nameof(OperationPipelineTests));
+        var logger = loggerFactory.CreateLogger(nameof(OperationPipelineTests));
 
-        var pipeline = new OperationPipeline<int, int>()
+        var pipeline = new OperationPipeline<int, int>(logger)
             // ReSharper disable once IntDivisionByZero - test for exception.
             .AddOperation<int, int>(x => x / 0);
 
@@ -53,7 +53,7 @@ public class OperationPipelineTests : IDisposable
     [Fact]
     public async Task RunAsync_WithExplicitResult_Success()
     {
-        var logger = new SerilogLoggerFactory().CreateLogger(nameof(OperationPipelineTests));
+        var logger = loggerFactory.CreateLogger(nameof(OperationPipelineTests));
 
         int final = 0;
 
@@ -71,13 +71,13 @@ public class OperationPipelineTests : IDisposable
         var logEvents = TestCorrelator.GetLogEventsFromCurrentContext();
 
         Assert.Equal(55, result);
-        Assert.Equal(4, logEvents.Count(x => x.Level == LogEventLevel.Information));
+        Assert.Equal(6, logEvents.Count(x => x.Level == LogEventLevel.Information));
     }
 
     [Fact]
     public async Task RunAsync_WithImplicitResult_Success()
     {
-        var logger = new SerilogLoggerFactory().CreateLogger(nameof(OperationPipelineTests));
+        var logger = loggerFactory.CreateLogger(nameof(OperationPipelineTests));
 
         var pipeline = new OperationPipeline<string, int>(logger)
             .AddOperation<string, int>(Convert.ToInt32)
@@ -87,6 +87,6 @@ public class OperationPipelineTests : IDisposable
         var logEvents = TestCorrelator.GetLogEventsFromCurrentContext();
 
         Assert.Equal(55, result);
-        Assert.Equal(4, logEvents.Count(x => x.Level == LogEventLevel.Information));
+        Assert.Equal(6, logEvents.Count(x => x.Level == LogEventLevel.Information));
     }
 }
