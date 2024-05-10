@@ -26,18 +26,30 @@ public class OperationPipeline<TParam, TResult>
 
     protected TParam? Parameter { get; private set; }
 
-    private void Reset()
-    {
-        resultFactory = null;
-        earlyExitSpecified = false;
-    }
-
     public TResult? Run(TParam parameter)
     {
         if (parameter == null)
             throw new ArgumentNullException(nameof(parameter));
 
-        return RunInternal(CancellationToken.None);
+        if (parameter == null)
+            throw new ArgumentNullException(nameof(parameter));
+
+        Parameter = parameter;
+
+        if (operations.Count == 0)
+            throw new InvalidOperationException("Must have 1 or more operations configured.");
+
+        using (new ScopeStopwatch { OnStart = LogPipelineStart, OnComplete = LogPipelineFinish })
+        {
+            try
+            {
+                return RunInternal(CancellationToken.None);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
     }
 
     /// <exception cref="OperationCanceledException" />
@@ -51,11 +63,8 @@ public class OperationPipeline<TParam, TResult>
         if (operations.Count == 0)
             throw new InvalidOperationException("Must have 1 or more operations configured.");
 
-        using (new ScopedStopwatch(
-                   elapsed => Logger?.LogInformation("Pipeline [{PipelineId}](`{PipelineName}`) ended in {ElapsedMs}ms", Id, Name, elapsed.TotalMilliseconds)))
+        using (new ScopeStopwatch { OnStart = LogPipelineStart, OnComplete = LogPipelineFinish })
         {
-            Logger?.LogInformation("Pipeline [{PipelineId}](`{PipelineName}`) starting...", Id, Name);
-
             try
             {
                 return await Task.Run(() => RunInternal(cancellationToken), cancellationToken).ConfigureAwait(false);
@@ -69,65 +78,6 @@ public class OperationPipeline<TParam, TResult>
                 Reset();
             }
         }
-    }
-
-    private TResult? RunInternal(CancellationToken cancellationToken = default)
-    {
-        var firstOperation = operations.First();
-        var lastOperation = operations.Last();
-
-        object? operationResult = default(TResult?);
-
-        foreach (var operation in operations.Where(x => x.CanExecute()))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            using (new ScopedStopwatch(
-                       elapsed => Logger?.LogInformation(
-                           "Pipeline [{PipelineId}] operation `{OperationName}` ended in {ElapsedMs}ms",
-                           Id,
-                           operation.Name,
-                           elapsed.TotalMilliseconds)))
-            {
-                try
-                {
-                    // Determine the parameter for the operation.
-                    object? operationParameter = operation == firstOperation
-                        ? Parameter
-                        : operationResult;
-
-                    // Run the operation; using its input factory as a parameter.
-                    operationResult = operation.UntypedExecution(operationParameter);
-
-                    // Operation was completed, so invoke the completion handler if there is one.
-                    operation.UntypedOnCompletionHandler?.Invoke(operationResult);
-
-                    // Exit early conditions were met, so break.
-                    if (earlyExitSpecified)
-                        break;
-                }
-                catch (Exception ex)
-                {
-                    // If the operation has an exception handler defined,
-                    // If it doesn't have one - propagate the exception.
-                    // If it does have one - call it to see if it handles the exception, if it doesn't, we propagate it.
-                    if (!operation.OnExceptionHandler?.Invoke(ex) ?? true)
-                        throw;
-                }
-                finally
-                {
-                    // If last operation and result has not been explicitly set.
-                    // Use the last operation's result.
-                    if (resultFactory == null && operation == lastOperation)
-                    {
-                        // ReSharper disable once AccessToModifiedClosure
-                        SetResult(() => (TResult?)operationResult);
-                    }
-                }
-            }
-        }
-
-        return resultFactory!();
     }
 
     public OperationPipeline<TParam, TResult> SetResult(Func<TResult?> pipelineResultFactory)
@@ -180,7 +130,7 @@ public class OperationPipeline<TParam, TResult>
     }
 
     public OperationPipeline<TParam, TResult> AddPipeline<TInput, TOutput>(OperationPipeline<TInput, TOutput> pipeline, string? operationName = null,
-    Action<TOutput>? onCompletionHandler = null, Func<Exception, bool>? onExceptionHandler = null)
+        Action<TOutput>? onCompletionHandler = null, Func<Exception, bool>? onExceptionHandler = null)
     {
         AddOperation(new DelegateOperation<TInput, TOutput>(pipeline.Run, $"Pipeline `{pipeline.Name}`"));
         return this;
@@ -196,5 +146,85 @@ public class OperationPipeline<TParam, TResult>
     {
         operations.Clear();
         return this;
+    }
+
+    protected virtual void LogPipelineStart(DateTimeOffset now) =>
+        Logger?.LogInformation("Pipeline [{PipelineId}](`{PipelineName}`) starting at {Now}...", Id, Name, now);
+
+    protected virtual void LogPipelineFinish(TimeSpan elapsed) => Logger?.LogInformation(
+        "Pipeline [{PipelineId}](`{PipelineName}`) ended in {ElapsedMs}ms",
+        Id,
+        Name,
+        elapsed.TotalMilliseconds);
+
+    protected virtual void LogOperationFinish(string operationName, TimeSpan elapsed) => Logger?.LogInformation(
+        "Pipeline [{PipelineId}] operation `{OperationName}` ended in {ElapsedMs}ms",
+        Id,
+        operationName,
+        elapsed.TotalMilliseconds);
+
+    protected virtual void LogOperationStart(string operationName, DateTimeOffset now) => Logger?.LogInformation(
+        "Pipeline [{PipelineId}] operation `{OperationName}` starting at {Now}...",
+        Id,
+        operationName,
+        now);
+
+    private void Reset()
+    {
+        resultFactory = null;
+        earlyExitSpecified = false;
+    }
+
+    private TResult? RunInternal(CancellationToken cancellationToken = default)
+    {
+        var firstOperation = operations.First();
+        var lastOperation = operations.Last();
+
+        object? operationResult = default(TResult?);
+
+        foreach (var operation in operations.Where(x => x.CanExecute()))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            using (new ScopeStopwatch
+                       { OnStart = now => LogOperationStart(operation.Name, now), OnComplete = elapsed => LogOperationFinish(operation.Name, elapsed) })
+            {
+                try
+                {
+                    // Determine the parameter for the operation.
+                    object? operationParameter = operation == firstOperation
+                        ? Parameter
+                        : operationResult;
+
+                    // Run the operation; using its input factory as a parameter.
+                    operationResult = operation.UntypedExecution(operationParameter);
+
+                    // Operation was completed, so invoke the completion handler if there is one.
+                    operation.UntypedOnCompletionHandler?.Invoke(operationResult);
+
+                    // Exit early conditions were met, so break.
+                    if (earlyExitSpecified)
+                        break;
+                }
+                catch (Exception ex)
+                {
+                    // If the operation has an exception handler defined,
+                    // If it doesn't have one - propagate the exception.
+                    // If it does have one - call it to see if it handles the exception, if it doesn't, we propagate it.
+                    if (!operation.OnExceptionHandler?.Invoke(ex) ?? true)
+                        throw;
+                }
+                finally
+                {
+                    // If last operation and result has not been explicitly set.
+                    // Use the last operation's result.
+                    if (resultFactory == null && operation == lastOperation)
+                        // ReSharper disable once AccessToModifiedClosure
+                        SetResult(() => (TResult?)operationResult);
+                }
+            }
+        }
+
+        return resultFactory!();
     }
 }
