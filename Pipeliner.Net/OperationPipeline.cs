@@ -31,24 +31,21 @@ public class OperationPipeline<TParam, TResult>
         if (parameter == null)
             throw new ArgumentNullException(nameof(parameter));
 
-        if (parameter == null)
-            throw new ArgumentNullException(nameof(parameter));
-
         Parameter = parameter;
 
         if (operations.Count == 0)
             throw new InvalidOperationException("Must have 1 or more operations configured.");
-
-        using (new ScopeStopwatch { OnStart = LogPipelineStart, OnComplete = LogPipelineFinish })
+        
+        try
         {
-            try
+            using (new ScopeStopwatch { OnStart = LogPipelineStart, OnComplete = LogPipelineFinish })
             {
                 return RunInternal(CancellationToken.None);
             }
-            finally
-            {
-                Reset();
-            }
+        }
+        finally
+        {
+            Reset();
         }
     }
 
@@ -63,20 +60,20 @@ public class OperationPipeline<TParam, TResult>
         if (operations.Count == 0)
             throw new InvalidOperationException("Must have 1 or more operations configured.");
 
-        using (new ScopeStopwatch { OnStart = LogPipelineStart, OnComplete = LogPipelineFinish })
+        try
         {
-            try
+            using (new ScopeStopwatch { OnStart = LogPipelineStart, OnComplete = LogPipelineFinish })
             {
                 return await Task.Run(() => RunInternal(cancellationToken), cancellationToken).ConfigureAwait(false);
             }
-            catch (TaskCanceledException)
-            {
-                throw new OperationCanceledException("Pipeline was cancelled.");
-            }
-            finally
-            {
-                Reset();
-            }
+        }
+        catch (TaskCanceledException)
+        {
+            throw new OperationCanceledException("Pipeline was cancelled.");
+        }
+        finally
+        {
+            Reset();
         }
     }
 
@@ -129,10 +126,15 @@ public class OperationPipeline<TParam, TResult>
         return this;
     }
 
-    public OperationPipeline<TParam, TResult> AddPipeline<TInput, TOutput>(OperationPipeline<TInput, TOutput> pipeline, string? operationName = null,
-        Action<TOutput>? onCompletionHandler = null, Func<Exception, bool>? onExceptionHandler = null)
+    public OperationPipeline<TParam, TResult> AddPipeline<TInput, TOutput>(OperationPipeline<TInput, TOutput> pipeline, Action<TOutput>? onCompletionHandler = null, Func<Exception, bool>? onExceptionHandler = null)
     {
-        AddOperation(new DelegateOperation<TInput, TOutput>(pipeline.Run, $"Pipeline `{pipeline.Name}`"));
+        AddOperation(new DelegateOperation<TInput, TOutput>(pipeline.Run, $"Pipeline `{pipeline.Name}`", null, onCompletionHandler, onExceptionHandler));
+        return this;
+    }
+
+    public OperationPipeline<TParam, TResult> AddConditionalPipeline<TInput, TOutput>(Func<bool> ifTrueCondition, OperationPipeline<TInput, TOutput> pipeline, Action<TOutput>? onCompletionHandler = null, Func<Exception, bool>? onExceptionHandler = null)
+    {
+        AddOperation(new DelegateOperation<TInput, TOutput>(pipeline.Run, $"Pipeline `{pipeline.Name}`", ifTrueCondition, onCompletionHandler, onExceptionHandler));
         return this;
     }
 
@@ -145,6 +147,14 @@ public class OperationPipeline<TParam, TResult>
     public OperationPipeline<TParam, TResult> RemoveAllOperations()
     {
         operations.Clear();
+        return this;
+    }
+
+    public OperationPipeline<TParam, TResult> RemoveLast()
+    {
+        if (operations.Count > 0)
+            operations.Remove(operations.Last());
+
         return this;
     }
 
