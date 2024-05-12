@@ -1,7 +1,7 @@
 # Pipeliner.Net
 A library for creating reusable pipelines of operations that can be executed as a whole.
 
-## ![Continuous Integration](https://github.com/Emcrank/Pipeliner.Net/actions/workflows/Continous%Integration/badge.svg)
+## [![Continous Integration](https://github.com/Emcrank/Pipeliner.Net/actions/workflows/ci.yml/badge.svg)](https://github.com/Emcrank/Pipeliner.Net/actions/workflows/ci.yml)
 
 ```csharp
 var pipeline = new OperationPipeline<string, int>(logger)
